@@ -72,52 +72,61 @@ function create() {
     scoreText = this.add.bitmapText(16, 16, 'spaceFont', "Score: " + score);
     shapes = this.cache.json.get('shapes');
 
-    this.matter.world.on('collisionstart', function (event, bodyA, bodyB) {
-        var player, laser, meteor;
-        if (bodyA.gameObject.texture.key == 'player' || bodyB.gameObject.texture.key == 'player') {
-            if (bodyA.gameObject.texture.key == 'player' && bodyB.gameObject.texture.key.includes('meteor')) {
-                player = bodyA.gameObject;
-                meteor = bodyB.gameObject;
-            } else if (bodyA.gameObject.texture.key.includes('meteor') && bodyB.gameObject.texture.key == 'player') {
-                player = bodyB.gameObject;
-                meteor = bodyA.gameObject;
-            }
-            if (player.visible) {
-                destroyMeteor(meteor);
-                if (!shield.anims.isPlaying) {
-                    player.setVisible(false);
-                    explosion.x = player.x;
-                    explosion.y = player.y;
-                    explosion.setVisible(true);
-                    explosion.anims.play('explosion');
+    this.matter.world.on('collisionstart', function (event) {
+        var player, laser, meteor, key1, key2;
+        var pairs = event.pairs.slice();
+        for (var i=0;i<pairs.length;i++) {
+            try {
+                key1 = pairs[i].bodyA.gameObject.texture.key;
+                key2 = pairs[i].bodyB.gameObject.texture.key;
+                if (key1 == 'player' || key2 == 'player') {
+                    if (key1 == 'player' && key2.includes('meteor')) {
+                        player = pairs[i].bodyA.gameObject;
+                        meteor = pairs[i].bodyB.gameObject;
+                    } else if (key1.includes('meteor') && key2 == 'player') {
+                        player = pairs[i].bodyB.gameObject;
+                        meteor = pairs[i].bodyA.gameObject;
+                    }
+                    if (player.visible) {
+                        destroyMeteor(meteor);
+                        if (!shield.anims.isPlaying) {
+                            player.setVisible(false);
+                            explosion.x = player.x;
+                            explosion.y = player.y;
+                            explosion.setVisible(true);
+                            explosion.anims.play('explosion');
+                        }
+                    }
+                } else {
+                    if (key1 == 'laser' && key2.includes('meteor')) {
+                        laser = pairs[i].bodyA.gameObject;
+                        meteor = pairs[i].bodyB.gameObject;
+                    } else if (key1.includes('meteor') && key2 == 'laser') {
+                        laser = pairs[i].bodyB.gameObject;
+                        meteor = pairs[i].bodyA.gameObject;
+                    }
+                    laser.destroy();
+                    var health = meteor.data.get('health');
+                    if (health <= 1) {
+                        destroyMeteor(meteor);
+                    } else {
+                        var timeline = game.scene.getAt(0).tweens.timeline();
+                        timeline.add({
+                            targets: meteor,
+                            scale: 1.1,
+                            duration: 30
+                        });
+                        timeline.add({
+                            targets: meteor,
+                            scale: 1,
+                            duration: 30
+                        });
+                        timeline.play();
+                        meteor.data.set('health', health-1);
+                    }
                 }
-            }
-        } else {
-            if (bodyA.gameObject.texture.key == 'laser' && bodyB.gameObject.texture.key.includes('meteor')) {
-                laser = bodyA.gameObject;
-                meteor = bodyB.gameObject;
-            } else if (bodyA.gameObject.texture.key.includes('meteor') && bodyB.gameObject.texture.key == 'laser') {
-                laser = bodyB.gameObject;
-                meteor = bodyA.gameObject;
-            }
-            laser.destroy();
-            var health = meteor.data.get('health');
-            if (health <= 1) {
-                destroyMeteor(meteor);
-            } else {
-                var timeline = game.scene.getAt(0).tweens.timeline();
-                timeline.add({
-                    targets: meteor,
-                    scale: 1.1,
-                    duration: 30
-                });
-                timeline.add({
-                    targets: meteor,
-                    scale: 1,
-                    duration: 30
-                });
-                timeline.play();
-                meteor.data.set('health', health-1);
+            } catch(error) {
+                console.log("error");
             }
         }
     });
