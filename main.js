@@ -13,12 +13,13 @@ const config = {
             matter: {
                 gravity: false,
                 setBounds: false,
-                debug: false
+                debug: false,
             }
         }
     }
 };
 
+var chunks;
 var player, shield, explosion;
 var particles;
 var cursors, spacebar;
@@ -32,6 +33,7 @@ const game = new Phaser.Game(config);
 function preload() {
     this.load.image('player', 'assets/playerShip1_orange.png');
     this.load.image('laser', 'assets/laserRed05.png');
+    this.load.image('background', 'assets/background.png');
     for (var i=0;i<9;i++) {
         if (i<2) {
             this.load.image('meteorParticle'+i, 'assets/meteorBrown_tiny'+i+'.png');
@@ -54,12 +56,24 @@ function create() {
     cat1 = this.matter.world.nextCategory();
     cat2 = this.matter.world.nextCategory();
     cat3 = this.matter.world.nextCategory();
-    player = this.matter.add.image(400, 525, 'player')
+    
+    chunks = this.physics.add.group();
+    var x = 0;
+    var y = -600;
+    for (var i=1;i<10;i++) {
+        var sprite = chunks.create(-800 + (x*800), y, 'background');
+        console.log("Chunk " + i + ": X: " + sprite.x + ", Y: " + sprite.y);
+        x++;
+        if (x == 3) { x = 0; y += 600 }
+    }
+
+    player = this.matter.add.image(400, 300, 'player')
         .setScale(0.5)
         .setSensor(true)
         .setCollisionCategory(cat3).setCollidesWith(cat2)
         .setVelocity(0)
         .setDataEnabled();
+    this.cameras.main.startFollow(player);
     explosion = this.physics.add.sprite(0, 0, 'explosion0')
         .setScale(0.25)
         .setVisible(false);
@@ -90,6 +104,7 @@ function create() {
                     if (player.visible) {
                         destroyMeteor(meteor);
                         if (!shield.anims.isPlaying) {
+                            player.setVelocity(0);
                             player.setVisible(false);
                             explosion.x = player.x;
                             explosion.y = player.y;
@@ -126,7 +141,7 @@ function create() {
                     }
                 }
             } catch(error) {
-                console.log("error");
+                //console.log("error");
             }
         }
     });
@@ -147,7 +162,7 @@ function create() {
 
     explosion.on('animationcomplete', function(anim, frame, object) {
         player.x = 400;
-        player.y = 525;
+        player.y = 300;
         player.setVisible(true);
         shield.setVisible(true);
         shield.anims.play('shield');
