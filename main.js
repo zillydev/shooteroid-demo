@@ -13,13 +13,13 @@ const config = {
             matter: {
                 gravity: false,
                 setBounds: false,
-                debug: false,
+                debug: false
             }
         }
     }
 };
 
-var chunks;
+var chunks, chunkBounds;
 var player, shield, explosion;
 var particles;
 var cursors, spacebar;
@@ -57,14 +57,34 @@ function create() {
     cat2 = this.matter.world.nextCategory();
     cat3 = this.matter.world.nextCategory();
     
-    chunks = this.physics.add.group();
+    chunks = this.add.container();
     var x = 0;
     var y = -600;
-    for (var i=1;i<10;i++) {
-        var sprite = chunks.create(-800 + (x*800), y, 'background');
-        console.log("Chunk " + i + ": X: " + sprite.x + ", Y: " + sprite.y);
+    for (var i=0;i<9;i++) {
+        var sprite = this.physics.add.image(-800 + (x*800), y, 'background').setOrigin(0);
+        sprite.name = i;
+        chunks.add(sprite);
         x++;
-        if (x == 3) { x = 0; y += 600 }
+        if (x == 3) { x = 0; y += 600; }
+    }
+
+    chunkBounds = {
+        top: {
+            x: -800,
+            y: 0
+        },
+        left: {
+            x: 0,
+            y: -600
+        },
+        right: {
+            x: 800,
+            y: -600
+        },
+        bottom: {
+            x: -800,
+            y: 600
+        }
     }
 
     player = this.matter.add.image(400, 300, 'player')
@@ -208,6 +228,15 @@ function update() {
             shield.x = player.x;
             shield.y = player.y;
         }
+        if (player.y < chunkBounds.top.y) {
+            genChunks([0, 1, 2], [6, 7, 8]);
+        } else if (player.y > chunkBounds.bottom.y) {
+            genChunks([6, 7, 8], [0, 1, 2]);
+        } else if (player.x < chunkBounds.left.x) {
+            genChunks([0, 3, 6], [2, 5, 8]);
+        } else if (player.x > chunkBounds.right.x) {
+            genChunks([2, 5, 8], [0, 3, 6]);
+        }
     }
 }
 
@@ -251,4 +280,40 @@ function destroyMeteor(meteor) {
     });
     emitter.emitParticle(20, meteor.x + meteor.width/2, meteor.y + meteor.height/2);
     meteor.destroy();
+}
+
+function genChunks(array1, array2) {
+    for (var i=0;i<3;i++) {
+        var sprite = chunks.getFirst('name', array2[i]);
+        chunks.remove(sprite, true);
+    }
+    var x, y;
+    for (var i=0;i<array1.length;i++) {
+        if (array1[0] == 0 && array1[1] == 1 && array1[2] == 2) {
+            x = chunkBounds.top.x + (i*800);
+            y = chunkBounds.top.y - 1200;
+        } else if (array1[0] == 6 && array1[1] == 7 && array1[2] == 8) {
+            x = chunkBounds.bottom.x + (i*800);
+            y = chunkBounds.bottom.y + 600;
+        } else if (array1[0] == 0 && array1[1] == 3 && array1[2] == 6) {
+            x = chunkBounds.left.x - 1600;
+            y = chunkBounds.left.y + (i*600);
+        } else if (array1[0] == 2 && array1[1] == 5 && array1[2] == 8) {
+            x = chunkBounds.right.x + 800;
+            y = chunkBounds.right.y + (i*600);
+        }
+        var sprite = game.scene.getAt(0).physics.add.sprite(x, y, 'background').setOrigin(0);
+        chunks.addAt(sprite, array1[i]);
+    }
+    for (var i=0;i<9;i++) {
+        chunks.getAt(i).name = i;
+    }
+    chunkBounds.top.x = chunks.getAt(3).x;
+    chunkBounds.top.y = chunks.getAt(3).y;
+    chunkBounds.left.x = chunks.getAt(1).x;
+    chunkBounds.left.y = chunks.getAt(1).y;
+    chunkBounds.right.x = chunks.getAt(2).x;
+    chunkBounds.right.y = chunks.getAt(2).y;
+    chunkBounds.bottom.x = chunks.getAt(6).x;
+    chunkBounds.bottom.y = chunks.getAt(6).y;
 }
