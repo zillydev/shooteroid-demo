@@ -13,27 +13,27 @@ const config = {
             matter: {
                 gravity: false,
                 setBounds: false,
-                debug: false
+                debug: true
             }
         }
     }
 };
 
-var chunks, chunkBounds;
+var chunks, chunkBounds, meteors;
 var player, shield, explosion;
 var particles;
 var cursors, spacebar;
 var score = 0;
 var scoreText;
 var shapes;
-var cat1, cat2, cat3;
+var cat1, cat2, cat3, cat4;
 
 const game = new Phaser.Game(config);
 
 function preload() {
     this.load.image('player', 'assets/playerShip1_orange.png');
     this.load.image('laser', 'assets/laserRed05.png');
-    this.load.image('background', 'assets/background.png');
+    this.load.image('background', 'assets/background2.png');
     for (var i=0;i<9;i++) {
         if (i<2) {
             this.load.image('meteorParticle'+i, 'assets/meteorBrown_tiny'+i+'.png');
@@ -56,12 +56,19 @@ function create() {
     cat1 = this.matter.world.nextCategory();
     cat2 = this.matter.world.nextCategory();
     cat3 = this.matter.world.nextCategory();
+    cat4 = this.matter.world.nextCategory();
     
+    meteors = [];
     chunks = this.add.container();
     var x = 0;
     var y = -600;
     for (var i=0;i<9;i++) {
-        var sprite = this.physics.add.image(-800 + (x*800), y, 'background').setOrigin(0);
+        var sprite = this.matter.add.image(-800 + (x*800), y, 'background')
+            .setStatic(true)
+            .setSensor(true)
+            .setCollisionCategory(cat4)
+            .setCollidesWith(cat2)
+            .setOrigin(0);
         sprite.name = i;
         chunks.add(sprite);
         x++;
@@ -94,6 +101,7 @@ function create() {
         .setVelocity(0)
         .setDataEnabled();
     this.cameras.main.startFollow(player);
+    this.cameras.main.zoom = 0.25;
     explosion = this.physics.add.sprite(0, 0, 'explosion0')
         .setScale(0.25)
         .setVisible(false);
@@ -238,6 +246,22 @@ function update() {
             genChunks([2, 5, 8], [0, 3, 6]);
         }
     }
+    for (var i=0;i<meteors.length;i++) {
+        try {
+            if (player.x > meteors[i].x || player.y > meteors[i].y) {
+                if ((player.x - meteors[i].x) > 1600 || (player.y - meteors[i].y) > 1600) {
+                    meteors[i].destroy();
+                }
+            } 
+            if (meteors[i].x > player.x || meteors[i].y > player.y) {
+                if ((meteors[i].x - player.x) > 1600 || (meteors[i].y - player.y) > 1600) {
+                    meteors[i].destroy();
+                }
+            }
+        } catch(err) {
+
+        }
+    }
 }
 
 function spawnMeteor() {
@@ -245,7 +269,7 @@ function spawnMeteor() {
     var meteor = game.scene.getAt(0).matter.add.sprite(Phaser.Math.Between(50, config.width - 50), -100, key, null, { shape: shapes[key]})
         .setSensor(true)
         .setCollisionCategory(cat2)
-        .setCollidesWith([cat1, cat3])
+        .setCollidesWith([cat1, cat3, cat4])
         .setDataEnabled()
         .setVelocityX(Phaser.Math.FloatBetween(-1, 1));
     if (key.search('Big') == 6) {
@@ -259,6 +283,7 @@ function spawnMeteor() {
         meteor.setVelocityY(Phaser.Math.Between(5, 6));
     }
     meteor.setAngularVelocity(Phaser.Math.FloatBetween(Phaser.Math.DegToRad(-0.1), Phaser.Math.DegToRad(0.1)));
+    meteors.push(meteor);
 }
 
 function destroyMeteor(meteor) {
@@ -302,7 +327,12 @@ function genChunks(array1, array2) {
             x = chunkBounds.right.x + 800;
             y = chunkBounds.right.y + (i*600);
         }
-        var sprite = game.scene.getAt(0).physics.add.sprite(x, y, 'background').setOrigin(0);
+        var sprite = game.scene.getAt(0).matter.add.image(x, y, 'background')
+            .setOrigin(0)
+            .setStatic(true)
+            .setSensor(true)
+            .setCollisionCategory(cat4)
+            .setCollidesWith(cat2);
         chunks.addAt(sprite, array1[i]);
     }
     for (var i=0;i<9;i++) {
