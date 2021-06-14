@@ -13,27 +13,156 @@ const config = {
             matter: {
                 gravity: false,
                 setBounds: false,
-                debug: true
+                debug: false
             }
         }
     }
 };
 
-var chunks, chunkBounds, meteors;
-var player, shield, explosion;
+var chunks, chunkBounds;
+var player, shield, explosion, crosshair;
+var meteorPool, laserPool;
 var particles;
 var cursors, spacebar;
 var score = 0;
 var scoreText;
+var UICam;
 var shapes;
-var cat1, cat2, cat3, cat4;
+var cat1, cat2, cat3;
 
 const game = new Phaser.Game(config);
+
+class Meteor extends Phaser.Physics.Matter.Image {
+    constructor(scene, x, y, key) {
+        super(scene.matter.world, x, y, key, null, {
+            shape: shapes.key,
+            isSensor: true,
+            frictionAir: 0
+        });
+        this.setDataEnabled();
+        this.setCollisionCategory(cat2);
+        this.setCollidesWith([cat1, cat3]);
+        this.updateVel();
+        UICam.ignore(this);
+    }
+
+    updateVel() {
+        if (this.texture.key.search('Big') == 6) {
+            this.data.set('health', 6);
+            this.speed = Phaser.Math.Between(2, 3);
+        } else if (this.texture.key.search('Med') == 6) {
+            this.data.set('health', 2);
+            this.speed = Phaser.Math.Between(3, 4);
+        } else {
+            this.data.set('health', 1);
+            this.speed = Phaser.Math.Between(5, 6);
+        }
+        this.direction = Math.atan((player.x - this.x)/(player.y - this.y));
+        this.speed = (player.y >= this.y) ? this.speed:-this.speed;
+        this.setVelocityX(this.speed*Math.sin(this.direction));
+        this.setVelocityY(this.speed*Math.cos(this.direction));
+        this.setAngularVelocity(Phaser.Math.FloatBetween(-0.05, 0.05));
+    }
+
+    emitParticles() {
+        particles.setTexture('meteorParticle' + Phaser.Math.Between(0, 1));
+        var emitter = particles.createEmitter({
+            speed: 100,
+            scale: { start: 2, end: 0 },
+            lifespan: 500,
+            on: false
+        });
+        emitter.emitParticle(20, this.x + this.width/2, this.y + this.height/2);
+    }
+}
+
+class MeteorPool extends Phaser.GameObjects.Group {
+    constructor(scene, config = {}) {
+        const defaults = {
+            maxSize: -1
+        }
+        super(scene, Object.assign(defaults, config));
+    }
+
+    spawn(x, y, key) {
+        const spawnExisting = this.countActive(false) > 0;
+        var meteor;
+        if (spawnExisting) {
+            meteor = this.getFirstDead(false, x, y);
+            meteor.setActive(true);
+            meteor.setVisible(true);
+            meteor.updateVel();
+            meteor.world.add(meteor.body);
+        } else {
+            meteor = new Meteor(this.scene, x, y, key);
+            this.add(meteor, true);
+        }
+        return meteor;
+    }
+
+    despawn(meteor) {
+        meteor.setActive(false);
+        meteor.setVisible(false);
+        meteor.world.remove(meteor.body);
+    }
+}
+
+class Laser extends Phaser.Physics.Matter.Image {
+    constructor(scene, x, y, tx, ty, rotation) {
+        super(scene.matter.world, x, y, 'laser');
+        this.setSensor(true);
+        this.setCollisionCategory(cat1);
+        this.setCollidesWith(cat2);
+        this.setFrictionAir(0);
+        this.updateVel(x, y, tx, ty, rotation);
+        UICam.ignore(this);
+    }
+
+    updateVel(x, y, tx, ty, rotation) {
+        this.direction = Math.atan((tx-x) / (ty-y));
+        this.speed = (ty >= y) ? 20:-20;
+        this.setVelocityX(this.speed*Math.sin(this.direction));
+        this.setVelocityY(this.speed*Math.cos(this.direction));
+        this.rotation = rotation;
+    }
+}
+
+class LaserPool extends Phaser.GameObjects.Group {
+    constructor(scene, config = {}) {
+        const defaults = {
+            maxSize: -1
+        }
+        super(scene, Object.assign(defaults, config));
+    }
+
+    spawn(x, y, tx, ty, rotation) {
+        const spawnExisting = this.countActive(false) > 0;
+        var laser;
+        if (spawnExisting) {
+            laser = this.getFirstDead(false, x, y);
+            laser.setActive(true);
+            laser.setVisible(true);
+            laser.updateVel(x, y, tx, ty, rotation);
+            laser.world.add(laser.body);
+        } else {
+            laser = new Laser(this.scene, x, y, tx, ty, rotation);
+            this.add(laser, true);
+        }
+        return laser;
+    }
+
+    despawn(laser) {
+        laser.setActive(false);
+        laser.setVisible(false);
+        laser.world.remove(laser.body);
+    }
+}
 
 function preload() {
     this.load.image('player', 'assets/playerShip1_orange.png');
     this.load.image('laser', 'assets/laserRed05.png');
-    this.load.image('background', 'assets/background2.png');
+    this.load.image('crosshair', 'assets/crosshair.png');
+    this.load.image('background', 'assets/background.png');
     for (var i=0;i<9;i++) {
         if (i<2) {
             this.load.image('meteorParticle'+i, 'assets/meteorBrown_tiny'+i+'.png');
@@ -56,19 +185,11 @@ function create() {
     cat1 = this.matter.world.nextCategory();
     cat2 = this.matter.world.nextCategory();
     cat3 = this.matter.world.nextCategory();
-    cat4 = this.matter.world.nextCategory();
-    
-    meteors = [];
+
     chunks = this.add.container();
-    var x = 0;
-    var y = -600;
+    var x = 0, y = -600;
     for (var i=0;i<9;i++) {
-        var sprite = this.matter.add.image(-800 + (x*800), y, 'background')
-            .setStatic(true)
-            .setSensor(true)
-            .setCollisionCategory(cat4)
-            .setCollidesWith(cat2)
-            .setOrigin(0);
+        var sprite = this.physics.add.image(-800 + (x*800), y, 'background').setOrigin(0);
         sprite.name = i;
         chunks.add(sprite);
         x++;
@@ -94,25 +215,37 @@ function create() {
         }
     }
 
-    player = this.matter.add.image(400, 300, 'player')
+    var playerLastPosX = 400, playerLastPosY = 300;
+    player = this.matter.add.image(playerLastPosX, playerLastPosY, 'player')
         .setScale(0.5)
         .setSensor(true)
         .setCollisionCategory(cat3).setCollidesWith(cat2)
         .setVelocity(0)
         .setDataEnabled();
-    this.cameras.main.startFollow(player);
-    this.cameras.main.zoom = 0.25;
+    this.cameras.main.startFollow(player, false, 0.5, 0.5);
+    this.cameras.main.zoom = 0.75;
+    crosshair = this.matter.add.image(0, 0, 'crosshair');
     explosion = this.physics.add.sprite(0, 0, 'explosion0')
         .setScale(0.25)
         .setVisible(false);
     shield = this.physics.add.sprite(player.x, player.y, 'shield0')
         .setScale(0.5)
         .setVisible(false);
+    meteorPool = new MeteorPool(this);
+    laserPool = new LaserPool(this);
     particles = this.add.particles('meteorParticle0');
     cursors = this.input.keyboard.createCursorKeys();
     spacebar = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
-    scoreText = this.add.bitmapText(16, 16, 'spaceFont', "Score: " + score);
     shapes = this.cache.json.get('shapes');
+    UICam = this.cameras.add(0, 0, 800, 600);
+    scoreText = this.add.bitmapText(16, 16, 'spaceFont', "Score: " + score);
+    this.cameras.main.ignore(scoreText);
+    var children = this.children.getChildren();
+    for (var x in children) {
+        if (children[x] != scoreText) {
+            UICam.ignore(children[x]);
+        }
+    }
 
     this.matter.world.on('collisionstart', function (event) {
         var player, laser, meteor, key1, key2;
@@ -130,12 +263,16 @@ function create() {
                         meteor = pairs[i].bodyA.gameObject;
                     }
                     if (player.visible) {
-                        destroyMeteor(meteor);
+                        meteor.emitParticles();
+                        meteorPool.despawn(meteor);
                         if (!shield.anims.isPlaying) {
                             player.setVelocity(0);
+                            crosshair.setVelocity(0);
                             player.setVisible(false);
                             explosion.x = player.x;
-                            explosion.y = player.y;
+                            explosion.y= player.y;
+                            playerLastPosX = player.x;
+                            playerLastPosY = player.y;
                             explosion.setVisible(true);
                             explosion.anims.play('explosion');
                         }
@@ -148,10 +285,12 @@ function create() {
                         laser = pairs[i].bodyB.gameObject;
                         meteor = pairs[i].bodyA.gameObject;
                     }
-                    laser.destroy();
+                    laserPool.despawn(laser);
                     var health = meteor.data.get('health');
                     if (health <= 1) {
-                        destroyMeteor(meteor);
+                        meteor.emitParticles();
+                        meteorPool.despawn(meteor);
+                        scoreUp(meteor.texture.key);
                     } else {
                         var timeline = game.scene.getAt(0).tweens.timeline();
                         timeline.add({
@@ -168,11 +307,50 @@ function create() {
                         meteor.data.set('health', health-1);
                     }
                 }
-            } catch(error) {
-                //console.log("error");
-            }
+            } catch(error) {}
         }
     });
+
+    game.canvas.addEventListener('mousedown', function () {
+        game.input.mouse.requestPointerLock();
+    });
+
+    this.input.on('pointermove', function (pointer) {
+        if (this.input.mouse.locked)
+        {
+            crosshair.x += pointer.movementX;
+            crosshair.y += pointer.movementY;
+        }
+    }, this);
+
+    this.input.on('pointerdown', function () {
+        if (player.visible) {
+            var x1, y1, x2, y2;
+            if (player.angle >= 0 && player.angle <= 180) {
+                x1 = ((17/90) * player.angle) - 17;
+                x2 = ((-17/90) * player.angle) + 17;
+                if (player.angle >= 0 && player.angle <= 90) {
+                    y1 = (-17/90) * player.angle;
+                    y2 = (17/90) * player.angle;
+                } else {
+                    y1 = ((17/90) * player.angle) - 34;
+                    y2 = ((-17/90) * player.angle) + 34;
+                }
+            } else {
+                x1 = -(((17/90) * player.angle) + 17);
+                x2 = -(((-17/90) * player.angle) - 17);
+                if (player.angle <= 0 && player.angle >= -90) {
+                    y1 = (-17/90) * player.angle;
+                    y2 = (17/90) * player.angle;
+                } else {
+                    y1 = ((17/90) * player.angle) + 34;
+                    y2 = ((-17/90) * player.angle) - 34;
+                }
+            }
+            laser1 = laserPool.spawn(player.x + x1, player.y + y1, crosshair.x + x1, crosshair.y + y1, player.rotation);
+            laser2 = laserPool.spawn(player.x + x2, player.y + y2, crosshair.x + x2, crosshair.y + y2, player.rotation);
+        }
+    }, this);
 
     this.anims.create({
         key: 'shield',
@@ -189,8 +367,8 @@ function create() {
     });
 
     explosion.on('animationcomplete', function(anim, frame, object) {
-        player.x = 400;
-        player.y = 300;
+        player.x = playerLastPosX;
+        player.y = playerLastPosY;
         player.setVisible(true);
         shield.setVisible(true);
         shield.anims.play('shield');
@@ -201,7 +379,7 @@ function create() {
         }
     });
     this.time.addEvent({
-        delay: 400,
+        delay: 300,
         callback: spawnMeteor,
         loop: true
     });
@@ -211,30 +389,25 @@ function update() {
     if (player.visible) {
         if (cursors.left.isDown) {
             player.setVelocityX(-7);
+            crosshair.setVelocityX(-7);
         } else if (cursors.right.isDown) {
             player.setVelocityX(7);
+            crosshair.setVelocityX(7);
         } else if (cursors.up.isDown) {
             player.setVelocityY(-7);
+            crosshair.setVelocityY(-7);
         } else if (cursors.down.isDown) {
             player.setVelocityY(7);
+            crosshair.setVelocityY(7);
         } else {
             player.setVelocity(0);
+            crosshair.setVelocity(0);
         }
-        if (Phaser.Input.Keyboard.JustDown(spacebar)) {
-            this.matter.add.image(player.x - 17, player.y, 'laser', null)
-                .setSensor(true)
-                .setCollisionCategory(cat1)
-                .setCollidesWith(cat2)
-                .setVelocityY(-20);
-            this.matter.add.image(player.x + player.displayWidth - 33, player.y, 'laser', null)
-                .setSensor(true)
-                .setCollisionCategory(cat1)
-                .setCollidesWith(cat2)
-                .setVelocityY(-20);
-        }
+        player.rotation = Phaser.Math.Angle.Between(player.x, player.y, crosshair.x, crosshair.y) + Phaser.Math.DegToRad(90);
         if (shield.anims.isPlaying) {
             shield.x = player.x;
             shield.y = player.y;
+            shield.rotation = player.rotation;
         }
         if (player.y < chunkBounds.top.y) {
             genChunks([0, 1, 2], [6, 7, 8]);
@@ -246,48 +419,57 @@ function update() {
             genChunks([2, 5, 8], [0, 3, 6]);
         }
     }
-    for (var i=0;i<meteors.length;i++) {
-        try {
-            if (player.x > meteors[i].x || player.y > meteors[i].y) {
-                if ((player.x - meteors[i].x) > 1600 || (player.y - meteors[i].y) > 1600) {
-                    meteors[i].destroy();
-                }
-            } 
-            if (meteors[i].x > player.x || meteors[i].y > player.y) {
-                if ((meteors[i].x - player.x) > 1600 || (meteors[i].y - player.y) > 1600) {
-                    meteors[i].destroy();
-                }
-            }
-        } catch(err) {
-
-        }
-    }
 }
 
 function spawnMeteor() {
     var key = Phaser.Math.RND.pick(['meteorBig0', 'meteorBig1', 'meteorBig2', 'meteorBig3', 'meteorMed0', 'meteorMed1', 'meteorSmall0', 'meteorSmall1']);
-    var meteor = game.scene.getAt(0).matter.add.sprite(Phaser.Math.Between(50, config.width - 50), -100, key, null, { shape: shapes[key]})
-        .setSensor(true)
-        .setCollisionCategory(cat2)
-        .setCollidesWith([cat1, cat3, cat4])
-        .setDataEnabled()
-        .setVelocityX(Phaser.Math.FloatBetween(-1, 1));
-    if (key.search('Big') == 6) {
-        meteor.data.set('health', 6);
-        meteor.setVelocityY(Phaser.Math.Between(2, 3));
-    } else if (key.search('Med') == 6) {
-        meteor.data.set('health', 2);
-        meteor.setVelocityY(Phaser.Math.Between(3, 4));
-    } else {
-        meteor.data.set('health', 1);
-        meteor.setVelocityY(Phaser.Math.Between(5, 6));
+    var rand = Phaser.Math.RND.pick(['left', 'right', 'top', 'bottom']);
+    var x, y;
+    switch (rand) {
+        case 'left':
+            x = chunkBounds.top.x;
+            y = Phaser.Math.Between(chunkBounds.left.y, chunkBounds.bottom.y + 600);
+            break;
+        case 'right':
+            x = chunkBounds.right.x + 800;
+            y = Phaser.Math.Between(chunkBounds.left.y, chunkBounds.bottom.y + 600);
+            break;
+        case 'top':
+            x = Phaser.Math.Between(chunkBounds.top.x, chunkBounds.right.x + 800);
+            y = chunkBounds.left.y;
+            break;
+        case 'bottom':
+            x = Phaser.Math.Between(chunkBounds.top.x, chunkBounds.right.x + 800);
+            y = chunkBounds.bottom.y + 600;
     }
-    meteor.setAngularVelocity(Phaser.Math.FloatBetween(Phaser.Math.DegToRad(-0.1), Phaser.Math.DegToRad(0.1)));
-    meteors.push(meteor);
+    meteorPool.spawn(x, y, key);
+    meteorPool.children.iterate(function(child) {
+        if (player.x > child.x || player.y > child.y) {
+            if ((player.x - child.x) > 1600 || (player.y - child.y) > 1600) {
+                this.despawn(child);
+            }
+        } 
+        if (child.x > player.x || child.y > player.y) {
+            if ((child.x - player.x) > 1600 || (child.y - player.y) > 1600) {
+                this.despawn(child);
+            }
+        }
+    }, meteorPool);
+    laserPool.children.iterate(function(child) {
+        if (player.x > child.x || player.y > child.y) {
+            if ((player.x - child.x) > 1600 || (player.y - child.y) > 1600) {
+                laserPool.despawn(child);
+            }
+        } 
+        if (child.x > player.x || child.y > player.y) {
+            if ((child.x - player.x) > 1600 || (child.y - player.y) > 1600) {
+                laserPool.despawn(child);
+            }
+        }
+    }, laserPool);
 }
 
-function destroyMeteor(meteor) {
-    key = meteor.texture.key;
+function scoreUp(key) {
     if (key.search('Big') == 6) {
         score += 20;
     } else if (key.search('Med') == 6) {
@@ -296,15 +478,6 @@ function destroyMeteor(meteor) {
         score += 5;
     }
     scoreText.setText("Score: " + score);
-    particles.setTexture('meteorParticle' + Phaser.Math.Between(0, 1));
-    var emitter = particles.createEmitter({
-        speed: 100,
-        scale: { start: 2, end: 0 },
-        lifespan: 500,
-        on: false
-    });
-    emitter.emitParticle(20, meteor.x + meteor.width/2, meteor.y + meteor.height/2);
-    meteor.destroy();
 }
 
 function genChunks(array1, array2) {
@@ -327,13 +500,9 @@ function genChunks(array1, array2) {
             x = chunkBounds.right.x + 800;
             y = chunkBounds.right.y + (i*600);
         }
-        var sprite = game.scene.getAt(0).matter.add.image(x, y, 'background')
-            .setOrigin(0)
-            .setStatic(true)
-            .setSensor(true)
-            .setCollisionCategory(cat4)
-            .setCollidesWith(cat2);
+        var sprite = game.scene.getAt(0).physics.add.image(x, y, 'background').setOrigin(0);
         chunks.addAt(sprite, array1[i]);
+        UICam.ignore(sprite);
     }
     for (var i=0;i<9;i++) {
         chunks.getAt(i).name = i;
