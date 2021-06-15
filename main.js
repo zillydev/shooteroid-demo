@@ -1,7 +1,15 @@
+const windowWidth = 800;
+const windowHeight = 600;
+
 const config = {
     type: Phaser.AUTO,
-    width: 800,
-    height: 600,
+    scale: {
+        //mode: Phaser.Scale.FIT,
+        autoCenter: Phaser.Scale.CENTER_BOTH,
+        autoRound: true,
+        width: windowWidth,
+        height: windowHeight
+    },
     scene: {
         preload: preload,
         create: create,
@@ -61,7 +69,7 @@ class Meteor extends Phaser.Physics.Matter.Image {
         this.speed = (player.y >= this.y) ? this.speed:-this.speed;
         this.setVelocityX(this.speed*Math.sin(this.direction));
         this.setVelocityY(this.speed*Math.cos(this.direction));
-        this.setAngularVelocity(Phaser.Math.FloatBetween(-0.05, 0.05));
+        this.setAngularVelocity(Phaser.Math.FloatBetween(-0.02, 0.02));
     }
 
     emitParticles() {
@@ -109,11 +117,12 @@ class MeteorPool extends Phaser.GameObjects.Group {
 
 class Laser extends Phaser.Physics.Matter.Image {
     constructor(scene, x, y, tx, ty, rotation) {
-        super(scene.matter.world, x, y, 'laser');
-        this.setSensor(true);
+        super(scene.matter.world, x, y, 'laser', null, {
+            isSensor: true,
+            frictionAir: 0
+        });
         this.setCollisionCategory(cat1);
         this.setCollidesWith(cat2);
-        this.setFrictionAir(0);
         this.updateVel(x, y, tx, ty, rotation);
         UICam.ignore(this);
     }
@@ -158,6 +167,21 @@ class LaserPool extends Phaser.GameObjects.Group {
     }
 }
 
+class Player extends Phaser.Physics.Matter.Image {
+    constructor(scene, x, y) {
+        super(scene.matter.world, x, y, 'player', null, {
+            isSensor: true,
+            frictionAir: 0
+        });
+        this.setScale(0.5);
+        scene.add.existing(this);
+        this.setDataEnabled();
+        this.setCollisionCategory(cat3);
+        this.setCollidesWith(cat2);
+        this.health = 3;
+    }
+}
+
 function preload() {
     this.load.image('player', 'assets/playerShip1_orange.png');
     this.load.image('laser', 'assets/laserRed05.png');
@@ -187,41 +211,35 @@ function create() {
     cat3 = this.matter.world.nextCategory();
 
     chunks = this.add.container();
-    var x = 0, y = -600;
+    var x = 0, y = -windowHeight;
     for (var i=0;i<9;i++) {
-        var sprite = this.physics.add.image(-800 + (x*800), y, 'background').setOrigin(0);
+        var sprite = this.physics.add.image(-windowWidth + (x*windowWidth), y, 'background').setOrigin(0);
         sprite.name = i;
         chunks.add(sprite);
         x++;
-        if (x == 3) { x = 0; y += 600; }
+        if (x == 3) { x = 0; y += windowHeight; }
     }
 
     chunkBounds = {
         top: {
-            x: -800,
-            y: 0
+            x: chunks.getAt(3).x,
+            y: chunks.getAt(3).y
         },
         left: {
-            x: 0,
-            y: -600
+            x: chunks.getAt(1).x,
+            y: chunks.getAt(1).y
         },
         right: {
-            x: 800,
-            y: -600
+            x: chunks.getAt(2).x,
+            y: chunks.getAt(2).y
         },
         bottom: {
-            x: -800,
-            y: 600
+            x: chunks.getAt(6).x,
+            y: chunks.getAt(6).y
         }
     }
 
-    var playerLastPosX = 400, playerLastPosY = 300;
-    player = this.matter.add.image(playerLastPosX, playerLastPosY, 'player')
-        .setScale(0.5)
-        .setSensor(true)
-        .setCollisionCategory(cat3).setCollidesWith(cat2)
-        .setVelocity(0)
-        .setDataEnabled();
+    player = new Player(this, windowWidth/2, windowHeight/2);
     this.cameras.main.startFollow(player, false, 0.5, 0.5);
     this.cameras.main.zoom = 0.75;
     crosshair = this.matter.add.image(0, 0, 'crosshair');
@@ -237,7 +255,7 @@ function create() {
     cursors = this.input.keyboard.createCursorKeys();
     spacebar = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
     shapes = this.cache.json.get('shapes');
-    UICam = this.cameras.add(0, 0, 800, 600);
+    UICam = this.cameras.add(0, 0, windowWidth, windowHeight);
     scoreText = this.add.bitmapText(16, 16, 'spaceFont', "Score: " + score);
     this.cameras.main.ignore(scoreText);
     var children = this.children.getChildren();
@@ -270,9 +288,7 @@ function create() {
                             crosshair.setVelocity(0);
                             player.setVisible(false);
                             explosion.x = player.x;
-                            explosion.y= player.y;
-                            playerLastPosX = player.x;
-                            playerLastPosY = player.y;
+                            explosion.y = player.y;
                             explosion.setVisible(true);
                             explosion.anims.play('explosion');
                         }
@@ -367,8 +383,6 @@ function create() {
     });
 
     explosion.on('animationcomplete', function(anim, frame, object) {
-        player.x = playerLastPosX;
-        player.y = playerLastPosY;
         player.setVisible(true);
         shield.setVisible(true);
         shield.anims.play('shield');
@@ -428,41 +442,41 @@ function spawnMeteor() {
     switch (rand) {
         case 'left':
             x = chunkBounds.top.x;
-            y = Phaser.Math.Between(chunkBounds.left.y, chunkBounds.bottom.y + 600);
+            y = Phaser.Math.Between(chunkBounds.left.y, chunkBounds.bottom.y + windowWidth);
             break;
         case 'right':
-            x = chunkBounds.right.x + 800;
-            y = Phaser.Math.Between(chunkBounds.left.y, chunkBounds.bottom.y + 600);
+            x = chunkBounds.right.x + windowWidth;
+            y = Phaser.Math.Between(chunkBounds.left.y, chunkBounds.bottom.y + windowWidth);
             break;
         case 'top':
-            x = Phaser.Math.Between(chunkBounds.top.x, chunkBounds.right.x + 800);
+            x = Phaser.Math.Between(chunkBounds.top.x, chunkBounds.right.x + windowHeight);
             y = chunkBounds.left.y;
             break;
         case 'bottom':
-            x = Phaser.Math.Between(chunkBounds.top.x, chunkBounds.right.x + 800);
-            y = chunkBounds.bottom.y + 600;
+            x = Phaser.Math.Between(chunkBounds.top.x, chunkBounds.right.x + windowHeight);
+            y = chunkBounds.bottom.y + windowHeight;
     }
     meteorPool.spawn(x, y, key);
     meteorPool.children.iterate(function(child) {
         if (player.x > child.x || player.y > child.y) {
-            if ((player.x - child.x) > 1600 || (player.y - child.y) > 1600) {
+            if ((player.x - child.x) > (windowWidth*2) || (player.y - child.y) > (windowHeight*2)) {
                 this.despawn(child);
             }
         } 
         if (child.x > player.x || child.y > player.y) {
-            if ((child.x - player.x) > 1600 || (child.y - player.y) > 1600) {
+            if ((child.x - player.x) > (windowWidth*2) || (child.y - player.y) > (windowHeight*2)) {
                 this.despawn(child);
             }
         }
     }, meteorPool);
     laserPool.children.iterate(function(child) {
         if (player.x > child.x || player.y > child.y) {
-            if ((player.x - child.x) > 1600 || (player.y - child.y) > 1600) {
+            if ((player.x - child.x) > (windowWidth*2) || (player.y - child.y) > (windowHeight*2)) {
                 laserPool.despawn(child);
             }
         } 
         if (child.x > player.x || child.y > player.y) {
-            if ((child.x - player.x) > 1600 || (child.y - player.y) > 1600) {
+            if ((child.x - player.x) > (windowWidth*2) || (child.y - player.y) > (windowHeight*2)) {
                 laserPool.despawn(child);
             }
         }
@@ -488,17 +502,17 @@ function genChunks(array1, array2) {
     var x, y;
     for (var i=0;i<array1.length;i++) {
         if (array1[0] == 0 && array1[1] == 1 && array1[2] == 2) {
-            x = chunkBounds.top.x + (i*800);
-            y = chunkBounds.top.y - 1200;
+            x = chunkBounds.top.x + (i*windowWidth);
+            y = chunkBounds.top.y - (windowHeight*2);
         } else if (array1[0] == 6 && array1[1] == 7 && array1[2] == 8) {
-            x = chunkBounds.bottom.x + (i*800);
-            y = chunkBounds.bottom.y + 600;
+            x = chunkBounds.bottom.x + (i*windowWidth);
+            y = chunkBounds.bottom.y + windowHeight;
         } else if (array1[0] == 0 && array1[1] == 3 && array1[2] == 6) {
-            x = chunkBounds.left.x - 1600;
-            y = chunkBounds.left.y + (i*600);
+            x = chunkBounds.left.x - (windowWidth*2);
+            y = chunkBounds.left.y + (i*windowHeight);
         } else if (array1[0] == 2 && array1[1] == 5 && array1[2] == 8) {
-            x = chunkBounds.right.x + 800;
-            y = chunkBounds.right.y + (i*600);
+            x = chunkBounds.right.x + windowWidth;
+            y = chunkBounds.right.y + (i*windowHeight);
         }
         var sprite = game.scene.getAt(0).physics.add.image(x, y, 'background').setOrigin(0);
         chunks.addAt(sprite, array1[i]);
