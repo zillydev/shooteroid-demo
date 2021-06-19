@@ -1,5 +1,5 @@
-const windowWidth = 800;
-const windowHeight = 600;
+var windowWidth = 800;
+var windowHeight = 600;
 
 const config = {
     type: Phaser.AUTO,
@@ -183,6 +183,8 @@ class Player extends Phaser.Physics.Matter.Image {
 }
 
 function preload() {
+    this.load.plugin('rexvirtualjoystickplugin', 'https://raw.githubusercontent.com/rexrainbow/phaser3-rex-notes/master/dist/rexvirtualjoystickplugin.min.js', true);
+
     this.load.image('player', 'assets/playerShip1_orange.png');
     this.load.image('laser', 'assets/laserRed05.png');
     this.load.image('crosshair', 'assets/crosshair.png');
@@ -239,6 +241,7 @@ function create() {
         }
     }
 
+    this.scale.lockOrientation('landscape');
     player = new Player(this, windowWidth/2, windowHeight/2);
     this.cameras.main.startFollow(player, false, 0.5, 0.5);
     this.cameras.main.zoom = 0.75;
@@ -258,9 +261,22 @@ function create() {
     UICam = this.cameras.add(0, 0, windowWidth, windowHeight);
     scoreText = this.add.bitmapText(16, 16, 'spaceFont', "Score: " + score);
     this.cameras.main.ignore(scoreText);
+    var base = this.add.circle(0, 0, 50, 0x888888);
+    this.cameras.main.ignore(base);
+    var thumb = this.add.circle(0, 0, 25, 0xcccccc);
+    this.cameras.main.ignore(thumb);
+    var joyStick = this.plugins.get('rexvirtualjoystickplugin').add(this, {
+        x: 100,
+        y: windowHeight - 100,
+        radius: 50,
+        forceMin: 7,
+        base: base,
+        thumb: thumb
+    });
     var children = this.children.getChildren();
+    //this.cameras.main.ignore([joyStick.base, joyStick.thumb]);
     for (var x in children) {
-        if (children[x] != scoreText) {
+        if (children[x] != scoreText && children[x] != joyStick && children[x] != joyStick.base && children[x] != joyStick.thumb) {
             UICam.ignore(children[x]);
         }
     }
@@ -327,15 +343,32 @@ function create() {
         }
     });
 
-    game.canvas.addEventListener('mousedown', function () {
-        game.input.mouse.requestPointerLock();
-    });
+    /* this.scale.on('resize', function(gameSize) {
+        windowWidth = gameSize.width;
+        windowHeight = gameSize.height;
+    }, this); */
 
-    this.input.on('pointermove', function (pointer) {
-        if (this.input.mouse.locked)
-        {
+    /* game.canvas.addEventListener('mousedown', function () {
+        game.input.mouse.requestPointerLock();
+    }); */
+
+    /* this.input.on('pointermove', function (pointer) {
+        if (this.input.mouse.locked) {
             crosshair.x += pointer.movementX;
             crosshair.y += pointer.movementY;
+        }
+    }, this); */
+
+    joyStick.on('update', function() {
+        if (joyStick.force >= 7) {
+            var x1, y1;
+            var angle = joyStick.angle;
+            x1 = Math.sin(((angle+90)*Math.PI)/180) * 7;
+            y1 = Math.sin(((angle-180)*Math.PI)/180) * -7;
+            player.setVelocityX(x1);
+            player.setVelocityY(y1);
+        } else {
+            player.setVelocity(0);
         }
     }, this);
 
@@ -530,3 +563,7 @@ function genChunks(array1, array2) {
     chunkBounds.bottom.x = chunks.getAt(6).x;
     chunkBounds.bottom.y = chunks.getAt(6).y;
 }
+
+/* window.addEventListener('resize', function () {
+    game.scale.resize(window.innerWidth, window.innerHeight);
+}, false); */
