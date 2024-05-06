@@ -17,8 +17,8 @@ Welcome to Shooteroid, a thrilling JavaScript 2D game powered by the [Phaser](ht
 
 ## Controls
 
-- Use the arrow keys (or WASD keys) to navigate the spacecraft.
-- Press the spacebar to shoot at incoming asteroids.
+- Use the arrow keys to navigate the spacecraft.
+- Press the left mouse button to shoot at incoming asteroids.
 
 ## Screenshots
 
