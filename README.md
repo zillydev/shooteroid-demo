@@ -2,6 +2,8 @@
 
 Welcome to Shooteroid, a thrilling JavaScript 2D game powered by the [Phaser](https://phaser.io/) game framework. Navigate your spacecraft through vast open space, dodging and shooting incoming asteroids while aiming for the highest score.
 
+Playable at https://zillydev.github.io/shooteroid-demo/
+
 ## Features
 
 - **Immersive Gameplay:** Experience the thrill of navigating a spacecraft in open space.
@@ -22,8 +24,5 @@ Welcome to Shooteroid, a thrilling JavaScript 2D game powered by the [Phaser](ht
 
 ## Screenshots
 
-![Screenshot 1](screenshots/screenshot1.png)
+https://github.com/user-attachments/assets/b39d3bab-d75e-40a5-b8a6-e328c4720369
 
-![Screenshot 2](screenshots/screenshot2.png)
-
-![Screenshot 3](screenshots/screenshot3.png)
