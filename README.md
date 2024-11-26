@@ -11,6 +11,10 @@ Playable at https://zillydev.github.io/shooteroid-demo/
 - **Engaging Action:** Shoot incoming asteroids to survive and progress through waves of increasing difficulty.
 - **Score and Wave System:** Compete for the highest score and face challenging waves of asteroids.
 
+## Demo
+
+https://github.com/user-attachments/assets/b39d3bab-d75e-40a5-b8a6-e328c4720369
+
 ## Installation
 
 1. Clone the repository:
@@ -21,8 +25,3 @@ Playable at https://zillydev.github.io/shooteroid-demo/
 
 - Use the arrow keys to navigate the spacecraft.
 - Press the left mouse button to shoot at incoming asteroids.
-
-## Screenshots
-
-https://github.com/user-attachments/assets/b39d3bab-d75e-40a5-b8a6-e328c4720369
-
